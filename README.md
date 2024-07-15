@@ -8,7 +8,7 @@ A simple plugin for edit verilog. I hope you like it.
 
 # Installation
 ```viml
-Plug 'kdurant/verilog-testbench'
+Plug 'weiguoquan422/vim-verilog-testbench'
 ```
 
 # Usage
