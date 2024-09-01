@@ -213,6 +213,12 @@ class VerilogParse:
         else:
             instance_snippet = module_name + ' ' + module_name + 'Ex01' + '\n(\n'
 
+        direction_map = {
+            'input': 'i',
+            'output': 'o',
+            'inout': 'io'
+        }
+
         cnt = 0
 
         for ele in port:
@@ -220,8 +226,11 @@ class VerilogParse:
             direction = ele.get('port_type', '')
             width = ele.get('width', '')
 
+            # 将方向转换为缩略词
+            direction_abbr = direction_map.get(direction, direction)
+
             # 构建注释字符串
-            comment = f" //{direction}_{width}bit"
+            comment = f" //{direction_abbr}_{width}bit"
 
             if cnt+1 == len(port):
                 instance_snippet += '    .' + ele['name'] + (max_length-len(ele['name']))*' ' + '(' + '  ' + ele['name'] + (max_length-len(ele['name'])+4)*' ' + ')' + comment
