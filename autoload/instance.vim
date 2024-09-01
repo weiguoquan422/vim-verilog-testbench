@@ -1,4 +1,5 @@
 python3 << EOF
+import re
 import vim
 import os
 class VerilogParse:
@@ -74,61 +75,107 @@ class VerilogParse:
         return content
 
     def paser_port(self, content):
+        def parse_expression(expression, params):
+            """
+            解析表达式并计算其值。支持参数替换和基本的数学运算。
+            :param expression: 字符串表达式，如 'IRC_RII_UW-1'
+            :param params: 参数字典，如 {'IRC_RII_UW': 18}
+            :return: 计算后的整数值
+            """
+            # 用参数值替换表达式中的参数名
+            for param in params:
+                expression = expression.replace(param, str(params[param]))
+
+            try:
+                # 计算表达式值
+                return eval(expression)
+            except Exception as e:
+                print(f"Error evaluating expression: {expression}, Error: {e}")
+                return None
+
         """
-        找到verilog里的所有端口, 存放到列表中
-        :param content:
-        :return:
+        找到Verilog里的所有端口, 并解析端口位宽及参数
+        :param content: 包含Verilog代码的字符串列表
+        :return: 端口信息列表
         """
         port = []
+        params = {}
+
         for i in content:
             line = i.strip()
-            # 去掉 '=' 后面所有字符, eg: output reg cnt = 0,
-            if line.find('=') != -1:
-                line = line[:line.find('=')]
-            # 去掉 ',' 后面所有字符
-            if line.find(',') != -1:
-                line = line[:line.find(',')]
-            # 去掉 ';' 后面所有字符
-            if line.find(';') != -1:
-                line = line[:line.find(';')]
 
-            if line.find('//') != -1:
-                line = line[:line.find('//')]    # 如果是最后一行端口声明，去掉注释
-            # print(line)
+            # 提取parameter定义
+            if line.startswith('parameter'):
+                # 匹配parameter定义，例如 parameter IRC_RII_UW = 18;
+                pattern = r'\s*parameter\s+(\w+)\s*=\s*(.*?)(?:,\s*|\s*$)'
+                # pattern = r'\s*parameter\s+(\w+)\s*=\s*(.*?)(?:,|\s*\))'
+                match = re.match(pattern, line)
+                if match:
+                    param_name = match.group(1)
+                    param_value = match.group(2)
+                    params[param_name] = int(eval(param_value))
+
+            # 去掉 '=' 后面所有字符
+            if '=' in line:
+                line = line.split('=')[0].strip()
+
+            # 去掉 ',' 后面所有字符
+            if ',' in line:
+                line = line.split(',')[0].strip()
+
+            # 去掉 ';' 后面所有字符
+            if ';' in line:
+                line = line.split(';')[0].strip()
+
+            # 去掉注释
+            if '//' in line:
+                line = line.split('//')[0].strip()
 
             # 默认always语句后不会再有端口声明
-            if line.find('always') != -1:
+            if 'always' in line:
                 break
             else:
-                if line.find('input') == 0 or line.find('output') == 0 or line.find('inout') == 0:
-                    if line.find('input') == 0:
-                        self.dict['port_type'] = 'input'        # 获得端口类型， 删除input字符串
-                        line = line.replace('input', '').strip()
-                    elif line.find('output') == 0:
-                        self.dict['port_type'] = 'output'  # 获得端口类型， 删除output字符串
-                        line = line.replace('output', '').strip()
-                    elif line.find('inout') == 0:
-                        self.dict['port_type'] = 'inout'  # 获得端口类型， 删除inout字符串
-                        line = line.replace('inout', '').strip()
+                if line.startswith('input') or line.startswith('output') or line.startswith('inout'):
+                    if line.startswith('input'):
+                        self.dict['port_type'] = 'input'
+                        line = line[len('input'):].strip()
+                    elif line.startswith('output'):
+                        self.dict['port_type'] = 'output'
+                        line = line[len('output'):].strip()
+                    elif line.startswith('inout'):
+                        self.dict['port_type'] = 'inout'
+                        line = line[len('inout'):].strip()
 
-                    if line.find('reg') == 0:
+                    if line.startswith('reg'):
                         self.dict['vari_type'] = 'reg'
-                        line = line.replace('reg', '').strip()
+                        line = line[len('reg'):].strip()
                     else:
                         self.dict['vari_type'] = 'wire'
                         line = line.replace('wire', '').strip()
 
-                    if line.find('[') == 0:
-                        self.dict['width'] = line[line.find('[') + 1:line.find(']')]
+                    if '[' in line:
+                        # 提取位宽表达式
+                        width_expr = line[line.find('[') + 1:line.find(']')]
+                        start, end = map(str.strip, width_expr.split(':'))
 
+                        # 解析表达式并计算位宽
+                        start_val = parse_expression(start, params)
+                        end_val = parse_expression(end, params)
+                        if start_val is not None and end_val is not None:
+                            self.dict['width'] = abs(start_val - end_val) + 1
+                        else:
+                            self.dict['width'] = 'unknown'
+
+                        # 提取端口名称
                         line = line[line.find(']') + 1:].strip()
                         self.dict['name'] = line
                     else:
                         self.dict['width'] = '1'
                         self.dict['name'] = line
 
-                    dict = self.dict.copy()
-                    port.append(dict)
+                    dict_copy = self.dict.copy()
+                    port.append(dict_copy)
+
         return port
 
     def find_sub_module(self):
@@ -169,14 +216,21 @@ class VerilogParse:
         cnt = 0
 
         for ele in port:
+            # 获取端口的方向和位宽
+            direction = ele.get('port_type', '')
+            width = ele.get('width', '')
+
+            # 构建注释字符串
+            comment = f" //{direction}_{width}bit"
+
             if cnt+1 == len(port):
-                instance_snippet += '    .' + ele['name'] + (max_length-len(ele['name']))*' ' + '(' + '  ' + ele['name'] + (max_length-len(ele['name'])+4)*' ' + ')'
+                instance_snippet += '    .' + ele['name'] + (max_length-len(ele['name']))*' ' + '(' + '  ' + ele['name'] + (max_length-len(ele['name'])+4)*' ' + ')' + comment
                 instance_snippet += '\n);'
             else:
-                instance_snippet += '    .' + ele['name'] + (max_length-len(ele['name']))*' ' + '(' + '  ' + ele['name'] +  (max_length-len(ele['name'])+4)*' ' + '),\n'
+                instance_snippet += '    .' + ele['name'] + (max_length-len(ele['name']))*' ' + '(' + '  ' + ele['name'] +  (max_length-len(ele['name'])+4)*' ' + '),' + comment + '\n'
             cnt += 1
 
-        vim.command('let @*= "%s"' % instance_snippet)
+        vim.command('let @+= "%s"' % instance_snippet)
         return instance_snippet
 
     def create_interface_file(self):
@@ -198,8 +252,8 @@ class VerilogParse:
                 interface_content += p['name'] + ';\n'
         interface_content += '\nendinterface\n'
 
-        vim.command('let @*= "%s"' % interface_content)
-        vim.command('echo @*')
+        vim.command('let @+= "%s"' % interface_content)
+        vim.command('echo @+')
 
         #if os.path.exists(file_name) == False:
         #    f = open(file_name, 'w')
@@ -227,8 +281,8 @@ class VerilogParse:
         class_content += 'endtask\n\n'
         class_content += 'endclass\n'
 
-        vim.command('let @*= "%s"' % class_content)
-        vim.command('echo @*')
+        vim.command('let @+= "%s"' % class_content)
+        vim.command('echo @+')
         #if os.path.exists(file_name) == False:
         #    f = open(file_name, 'w')
         #    f.write(class_content)
@@ -255,11 +309,11 @@ class VerilogParse:
         tb_content += self.creat_instance_snippet();
         tb_content += '\n\nendmodule\n'
 
-        vim.command('let @*= "%s"' % tb_content)
-        vim.command('echo @*')
+        vim.command('let @+= "%s"' % tb_content)
+        vim.command('echo @+')
 
         #if os.path.exists(file_name) == False:
-        #    vim.command('let @*= "%s"' % tb_content)
+        #    vim.command('let @+= "%s"' % tb_content)
         #    f = open(file_name, 'w')
         #    f.write(tb_content)
         #    f.close()
@@ -269,7 +323,7 @@ let s:com = "py3"
 function! instance#generate()
     if &filetype == 'verilog'
         exec s:com 'VerilogParse().creat_instance_snippet()'
-        echo @*
+        echo @+
     else
         echomsg "Only support verilog file"
     end
