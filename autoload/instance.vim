@@ -162,7 +162,8 @@ class VerilogParse:
                         start_val = parse_expression(start, params)
                         end_val = parse_expression(end, params)
                         if start_val is not None and end_val is not None:
-                            self.dict['width'] = abs(start_val - end_val) + 1
+                            width_int = abs(start_val - end_val) + 1
+                            self.dict['width'] = str(width_int)
                         else:
                             self.dict['width'] = 'unknown'
 
