@@ -257,7 +257,7 @@ class VerilogParse:
             interface_content += 'logic '
 
             if p['width'] != '1':
-                interface_content += '[' + p['width'] + ']    ' + p['name'] + ';\n'
+                interface_content += '[' + p['width'] + '-1 : 0' + ']    ' + p['name'] + ';\n'
             else:
                 interface_content += p['name'] + ';\n'
         interface_content += '\nendinterface\n'
