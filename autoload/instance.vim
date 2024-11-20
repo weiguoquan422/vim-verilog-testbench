@@ -243,32 +243,88 @@ class VerilogParse:
         vim.command('let @+= "%s"' % instance_snippet)
         return instance_snippet
 
+
+    #def create_interface_file(self):
+    #    """
+    #    在当前文件目录下，生成基于当前文件的 interface 文件，端口名称列对齐
+    #    :return:
+    #    """
+    #    module_name = self.parse_module_name(self.content)
+    #    port = self.port
+
+    #    # 计算各列的最大宽度
+    #    max_logic_length = len('logic')
+    #    max_width_length = max(
+    #        len(f"[{p['width']}-1 : 0]") if p['width'] != '1' else 0
+    #        for p in port
+    #    )
+    #    max_name_length = max(len(p['name']) for p in port)
+
+    #    # 生成 interface 文件内容
+    #    interface_content = f'interface {module_name}_bfm;\n'
+    #    for p in port:
+    #        # logic列
+    #        interface_content += '    logic'.ljust(max_logic_length + 5)
+
+    #        # 位宽列
+    #        if p['width'] != '1':
+    #            width_str = f"[{p['width']}-1 : 0]"
+    #            interface_content += width_str.ljust(max_width_length + 2)
+    #        else:
+    #            interface_content += ' ' * (max_width_length + 2)
+
+    #        # 名称列
+    #        interface_content += f"{p['name'].ljust(max_name_length)};\n"
+
+    #    # 添加 endinterface
+    #    interface_content += '\nendinterface\n'
+
+    #    # 将内容复制到剪贴板并显示
+    #    vim.command('let @+= "%s"' % interface_content)
+    #    vim.command('echo @+')
+
+
+
     def create_interface_file(self):
         """
-        在当前文件目录下，生成基于当前文件的 interface 文件
+        在当前文件目录下，生成基于当前文件的 interface 文件，端口名称列对齐，包括位宽的 : [ ] 部分。
         :return:
         """
         module_name = self.parse_module_name(self.content)
         port = self.port
-        file_name = module_name + '_bfm.svh'
-        interface_content = 'interface ' + module_name + '_bfm;\n'
-        for p in port:
-            interface_content += '    '
-            interface_content += 'logic '
 
+        # 计算各列的最大宽度
+        max_logic_length = len('logic')
+        max_width_length = max(
+            len(str(int(p['width']) - 1)) if p['width'] != '1' else 0
+            for p in port
+        )
+        max_name_length = max(len(p['name']) for p in port)
+
+        # 生成 interface 文件内容
+        interface_content = f'interface {module_name}_bfm;\n'
+        for p in port:
+            # logic列
+            interface_content += '    logic'.ljust(max_logic_length + 5)
+
+            # 位宽列
             if p['width'] != '1':
-                interface_content += '[' + p['width'] + '-1 : 0' + ']    ' + p['name'] + ';\n'
+                width_str = f"[{str(int(p['width']) - 1).rjust(max_width_length)}:0]"
+                interface_content += width_str.ljust(max_width_length + 6)
             else:
-                interface_content += p['name'] + ';\n'
+                interface_content += ' ' * (max_width_length + 6)
+
+            # 名称列
+            interface_content += f"{p['name'].ljust(max_name_length)};\n"
+
+        # 添加 endinterface
         interface_content += '\nendinterface\n'
 
+        # 将内容复制到剪贴板并显示
         vim.command('let @+= "%s"' % interface_content)
         vim.command('echo @+')
 
-        #if os.path.exists(file_name) == False:
-        #    f = open(file_name, 'w')
-        #    f.write(interface_content)
-        #    f.close()
+
 
     def create_class_file(self):
         """
